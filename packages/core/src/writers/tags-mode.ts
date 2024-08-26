@@ -4,6 +4,7 @@ import { WriteModeProps } from '../types';
 import {
   camel,
   getFileInfo,
+  isFunction,
   isSyntheticDefaultImportsAllow,
   kebab,
   upath,
@@ -20,6 +21,7 @@ export const writeTagsMode = async ({
 }: WriteModeProps): Promise<string[]> => {
   const { filename, dirname, extension } = getFileInfo(output.target, {
     backupFilename: camel(builder.info.title),
+    extension: output.fileExtension,
   });
 
   const target = generateTargetForTags(builder, output);
@@ -34,45 +36,58 @@ export const writeTagsMode = async ({
         const {
           imports,
           implementation,
-          implementationMSW,
-          importsMSW,
+          implementationMock,
+          importsMock,
           mutators,
           clientMutators,
           formData,
           formUrlEncoded,
+          paramsSerializer,
         } = target;
 
         let data = header;
 
         const schemasPathRelative = output.schemas
-          ? upath.relativeSafe(dirname, getFileInfo(output.schemas).dirname)
+          ? upath.relativeSafe(
+              dirname,
+              getFileInfo(output.schemas, { extension: output.fileExtension })
+                .dirname,
+            )
           : './' + filename + '.schemas';
+
+        const importsForBuilder = [
+          {
+            exports: imports.filter(
+              (imp) =>
+                !importsMock.some((impMock) => imp.name === impMock.name),
+            ),
+            dependency: schemasPathRelative,
+          },
+        ];
 
         data += builder.imports({
           client: output.client,
           implementation,
-          imports: [
-            {
-              exports: imports.filter(
-                (imp) => !importsMSW.some((impMSW) => imp.name === impMSW.name),
-              ),
-              dependency: schemasPathRelative,
-            },
-          ],
+          imports: importsForBuilder,
           specsName,
           hasSchemaDir: !!output.schemas,
           isAllowSyntheticDefaultImports,
           hasGlobalMutator: !!output.override.mutator,
+          hasParamsSerializerOptions: !!output.override.paramsSerializerOptions,
           packageJson: output.packageJson,
+          output,
         });
 
         if (output.mock) {
           data += builder.importsMock({
-            implementation: implementationMSW,
-            imports: [{ exports: importsMSW, dependency: schemasPathRelative }],
+            implementation: implementationMock,
+            imports: [
+              { exports: importsMock, dependency: schemasPathRelative },
+            ],
             specsName,
             hasSchemaDir: !!output.schemas,
             isAllowSyntheticDefaultImports,
+            options: !isFunction(output.mock) ? output.mock : undefined,
           });
         }
 
@@ -104,6 +119,10 @@ export const writeTagsMode = async ({
           data += generateMutatorImports({ mutators: formUrlEncoded });
         }
 
+        if (paramsSerializer) {
+          data += generateMutatorImports({ mutators: paramsSerializer });
+        }
+
         data += '\n\n';
 
         if (implementation.includes('NonReadonly<')) {
@@ -116,7 +135,7 @@ export const writeTagsMode = async ({
         if (output.mock) {
           data += '\n\n';
 
-          data += implementationMSW;
+          data += implementationMock;
         }
 
         const implementationPath = upath.join(

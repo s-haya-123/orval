@@ -12,13 +12,14 @@ import {
   NormalizedOutputOptions,
   resolveRef,
 } from '@orval/core';
-import { generateMSWImports } from '@orval/msw';
-import { PathItemObject } from 'openapi3-ts';
+import { generateMockImports } from '@orval/mock';
+import { PathItemObject } from 'openapi3-ts/oas30';
 import {
   generateClientFooter,
   generateClientHeader,
   generateClientImports,
   generateClientTitle,
+  generateExtraFiles,
   generateOperations,
 } from './client';
 
@@ -59,6 +60,7 @@ export const getApiBuilder = async ({
         input,
         output,
         route,
+        pathRoute,
         context: resolvedContext,
       });
 
@@ -110,11 +112,16 @@ export const getApiBuilder = async ({
           pathRoute,
           override: output.override,
           context: resolvedContext,
-          mock: !!output.mock,
+          mock: output.mock,
+          // @ts-expect-error // FIXME
           output: output.target,
         },
+        output,
       );
 
+      verbsOptions.forEach((verbOption) => {
+        acc.verbOptions[verbOption.operationId] = verbOption;
+      });
       acc.schemas.push(...schemas);
       acc.operations = { ...acc.operations, ...pathOperations };
 
@@ -122,17 +129,27 @@ export const getApiBuilder = async ({
     },
     {
       operations: {},
+      verbOptions: {},
       schemas: [],
     } as GeneratorApiOperations,
+  );
+
+  const extraFiles = await generateExtraFiles(
+    output.client,
+    api.verbOptions,
+    output,
+    context,
   );
 
   return {
     operations: api.operations,
     schemas: api.schemas,
+    verbOptions: api.verbOptions,
     title: generateClientTitle,
     header: generateClientHeader,
     footer: generateClientFooter,
     imports: generateClientImports,
-    importsMock: generateMSWImports,
+    importsMock: generateMockImports,
+    extraFiles,
   };
 };

@@ -1,6 +1,11 @@
-import { ReferenceObject, SchemaObject } from 'openapi3-ts';
-import { resolveObject, resolveRef, resolveValue } from '../resolvers';
-import { ContextSpecs, ScalarValue, SchemaType } from '../types';
+import { ReferenceObject, SchemaObject } from 'openapi3-ts/oas30';
+import { resolveExampleRefs, resolveObject, resolveValue } from '../resolvers';
+import {
+  ContextSpecs,
+  ScalarValue,
+  SchemaType,
+  SchemaWithConst,
+} from '../types';
 import { isBoolean, isReference, jsDoc, pascal } from '../utils';
 import { combineSchemas } from './combine';
 import { getKey } from './keys';
@@ -32,6 +37,8 @@ export const getObject = ({
       type: 'object',
       isRef: true,
       hasReadonlyProps: item.readOnly || false,
+      example: item.example,
+      examples: resolveExampleRefs(item.examples, context),
     };
   }
 
@@ -49,7 +56,12 @@ export const getObject = ({
 
   if (item.type instanceof Array) {
     return combineSchemas({
-      schema: { anyOf: item.type.map((type) => ({ type })) },
+      schema: {
+        anyOf: item.type.map((type) => ({
+          ...item,
+          type,
+        })),
+      },
       name,
       separator: 'anyOf',
       context,
@@ -110,14 +122,16 @@ export const getObject = ({
           acc.hasReadonlyProps ||= isReadOnly || false;
           acc.imports.push(...resolvedValue.imports);
           acc.value += `\n  ${doc ? `${doc}  ` : ''}${
-            isReadOnly ? 'readonly ' : ''
+            isReadOnly && !context.output.override.suppressReadonlyModifier
+              ? 'readonly '
+              : ''
           }${getKey(key)}${isRequired ? '' : '?'}: ${resolvedValue.value};`;
           acc.schemas.push(...resolvedValue.schemas);
 
           if (arr.length - 1 === index) {
             if (item.additionalProperties) {
               if (isBoolean(item.additionalProperties)) {
-                acc.value += `\n  [key: string]: any;\n }`;
+                acc.value += `\n  [key: string]: unknown;\n }`;
               } else {
                 const resolvedValue = resolveValue({
                   schema: item.additionalProperties,
@@ -144,6 +158,8 @@ export const getObject = ({
           isRef: false,
           schema: {},
           hasReadonlyProps: false,
+          example: item.example,
+          examples: resolveExampleRefs(item.examples, context),
         } as ScalarValue,
       );
   }
@@ -151,7 +167,7 @@ export const getObject = ({
   if (item.additionalProperties) {
     if (isBoolean(item.additionalProperties)) {
       return {
-        value: `{ [key: string]: any }` + nullable,
+        value: `{ [key: string]: unknown }` + nullable,
         imports: [],
         schemas: [],
         isEnum: false,
@@ -176,9 +192,23 @@ export const getObject = ({
     };
   }
 
+  const itemWithConst = item as SchemaWithConst;
+  if (itemWithConst.const) {
+    return {
+      value: `'${itemWithConst.const}'` + nullable,
+      imports: [],
+      schemas: [],
+      isEnum: false,
+      type: 'string',
+      isRef: false,
+      hasReadonlyProps: item.readOnly || false,
+    };
+  }
+
   return {
     value:
-      item.type === 'object' ? '{ [key: string]: any }' : 'unknown' + nullable,
+      (item.type === 'object' ? '{ [key: string]: unknown }' : 'unknown') +
+      nullable,
     imports: [],
     schemas: [],
     isEnum: false,

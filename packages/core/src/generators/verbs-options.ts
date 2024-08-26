@@ -4,7 +4,7 @@ import {
   ParameterObject,
   PathItemObject,
   ReferenceObject,
-} from 'openapi3-ts';
+} from 'openapi3-ts/oas30';
 import {
   getBody,
   getOperationId,
@@ -19,6 +19,7 @@ import {
   GeneratorVerbOptions,
   GeneratorVerbsOptions,
   NormalizedInputOptions,
+  NormalizedMutator,
   NormalizedOperationOptions,
   NormalizedOutputOptions,
   NormalizedOverrideOutput,
@@ -42,6 +43,7 @@ const generateVerbOptions = async ({
   output,
   operation,
   route,
+  pathRoute,
   verbParameters = [],
   context,
 }: {
@@ -49,6 +51,7 @@ const generateVerbOptions = async ({
   output: NormalizedOutputOptions;
   operation: OperationObject;
   route: string;
+  pathRoute: string;
   verbParameters?: Array<ReferenceObject | ParameterObject>;
   components?: ComponentsObject;
   context: ContextSpecs;
@@ -123,6 +126,7 @@ const generateVerbOptions = async ({
     pathParams: parameters.path,
     operationId: operationId!,
     context,
+    output,
   });
 
   const props = getProps({
@@ -139,17 +143,18 @@ const generateVerbOptions = async ({
     name: operationName,
     mutator: override?.mutator,
     workspace: context.workspace,
-    tsconfig: context.tsconfig,
+    tsconfig: context.output.tsconfig,
   });
 
   const formData =
-    isString(override?.formData) || isObject(override?.formData)
+    (isString(override?.formData) || isObject(override?.formData)) &&
+    body.formData
       ? await generateMutator({
           output: output.target,
           name: operationName,
           mutator: override.formData,
           workspace: context.workspace,
-          tsconfig: context.tsconfig,
+          tsconfig: context.output.tsconfig,
         })
       : undefined;
 
@@ -160,7 +165,18 @@ const generateVerbOptions = async ({
           name: operationName,
           mutator: override.formUrlEncoded,
           workspace: context.workspace,
-          tsconfig: context.tsconfig,
+          tsconfig: context.output.tsconfig,
+        })
+      : undefined;
+
+  const paramsSerializer =
+    isString(override?.paramsSerializer) || isObject(override?.paramsSerializer)
+      ? await generateMutator({
+          output: output.target,
+          name: 'paramsSerializer',
+          mutator: override.paramsSerializer as NormalizedMutator,
+          workspace: context.workspace,
+          tsconfig: context.output.tsconfig,
         })
       : undefined;
 
@@ -169,6 +185,8 @@ const generateVerbOptions = async ({
   const verbOption: GeneratorVerbOptions = {
     verb: verb as Verbs,
     tags,
+    route,
+    pathRoute,
     summary: operation.summary,
     operationId: operationId!,
     operationName,
@@ -181,6 +199,7 @@ const generateVerbOptions = async ({
     mutator,
     formData,
     formUrlEncoded,
+    paramsSerializer,
     override,
     doc,
     deprecated,
@@ -200,12 +219,14 @@ export const generateVerbsOptions = ({
   input,
   output,
   route,
+  pathRoute,
   context,
 }: {
   verbs: PathItemObject;
   input: NormalizedInputOptions;
   output: NormalizedOutputOptions;
   route: string;
+  pathRoute: string;
   context: ContextSpecs;
 }): Promise<GeneratorVerbsOptions> =>
   asyncReduce(
@@ -217,6 +238,7 @@ export const generateVerbsOptions = ({
           output,
           verbParameters: verbs.parameters,
           route,
+          pathRoute,
           operation,
           context,
         });

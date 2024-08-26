@@ -4,11 +4,13 @@ import { OutputClient, WriteModeProps } from '../types';
 import {
   camel,
   getFileInfo,
+  isFunction,
   isSyntheticDefaultImportsAllow,
   upath,
 } from '../utils';
 import { generateTarget } from './target';
 import { getOrvalGeneratedTypes } from './types';
+import { getMockFileExtensionByTypeName } from '../utils/fileExtensions';
 
 export const writeSplitMode = async ({
   builder,
@@ -20,24 +22,30 @@ export const writeSplitMode = async ({
   try {
     const { filename, dirname, extension } = getFileInfo(output.target, {
       backupFilename: camel(builder.info.title),
+      extension: output.fileExtension,
     });
 
     const {
       imports,
       implementation,
-      implementationMSW,
-      importsMSW,
+      implementationMock,
+      importsMock,
       mutators,
       clientMutators,
       formData,
       formUrlEncoded,
+      paramsSerializer,
     } = generateTarget(builder, output);
 
     let implementationData = header;
-    let mswData = header;
+    let mockData = header;
 
     const relativeSchemasPath = output.schemas
-      ? upath.relativeSafe(dirname, getFileInfo(output.schemas).dirname)
+      ? upath.relativeSafe(
+          dirname,
+          getFileInfo(output.schemas, { extension: output.fileExtension })
+            .dirname,
+        )
       : './' + filename + '.schemas';
 
     const isAllowSyntheticDefaultImports = isSyntheticDefaultImportsAllow(
@@ -52,19 +60,18 @@ export const writeSplitMode = async ({
       hasSchemaDir: !!output.schemas,
       isAllowSyntheticDefaultImports,
       hasGlobalMutator: !!output.override.mutator,
+      hasParamsSerializerOptions: !!output.override.paramsSerializerOptions,
       packageJson: output.packageJson,
+      output,
     });
-    mswData += builder.importsMock({
-      implementation: implementationMSW,
-      imports: [
-        {
-          exports: importsMSW,
-          dependency: relativeSchemasPath,
-        },
-      ],
+
+    mockData += builder.importsMock({
+      implementation: implementationMock,
+      imports: [{ exports: importsMock, dependency: relativeSchemasPath }],
       specsName,
       hasSchemaDir: !!output.schemas,
       isAllowSyntheticDefaultImports,
+      options: !isFunction(output.mock) ? output.mock : undefined,
     });
 
     const schemasPath = !output.schemas
@@ -103,12 +110,18 @@ export const writeSplitMode = async ({
       });
     }
 
+    if (paramsSerializer) {
+      implementationData += generateMutatorImports({
+        mutators: paramsSerializer,
+      });
+    }
+
     if (implementation.includes('NonReadonly<')) {
       implementationData += getOrvalGeneratedTypes();
     }
 
     implementationData += `\n${implementation}`;
-    mswData += `\n${implementationMSW}`;
+    mockData += `\n${implementationMock}`;
 
     const implementationFilename =
       filename +
@@ -122,11 +135,17 @@ export const writeSplitMode = async ({
     );
 
     const mockPath = output.mock
-      ? upath.join(dirname, filename + '.msw' + extension)
+      ? upath.join(
+          dirname,
+          filename +
+            '.' +
+            getMockFileExtensionByTypeName(output.mock) +
+            extension,
+        )
       : undefined;
 
     if (mockPath) {
-      await fs.outputFile(mockPath, mswData);
+      await fs.outputFile(mockPath, mockData);
     }
 
     return [

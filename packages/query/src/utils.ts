@@ -11,6 +11,7 @@ import {
   upath,
   GetterProps,
   GetterPropType,
+  TEMPLATE_TAG_REGEX,
 } from '@orval/core';
 import chalk from 'chalk';
 
@@ -19,6 +20,7 @@ export const normalizeQueryOptions = (
   outputWorkspace: string,
 ): NormalizedQueryOptions => {
   return {
+    ...(queryOptions.usePrefetch ? { usePrefetch: true } : {}),
     ...(queryOptions.useQuery ? { useQuery: true } : {}),
     ...(queryOptions.useInfinite ? { useInfinite: true } : {}),
     ...(queryOptions.useInfiniteQueryParam
@@ -47,6 +49,15 @@ export const normalizeQueryOptions = (
         }
       : {}),
     ...(queryOptions.signal ? { signal: true } : {}),
+    ...(queryOptions.shouldExportMutatorHooks
+      ? { shouldExportMutatorHooks: true }
+      : {}),
+    ...(queryOptions.shouldExportQueryKey
+      ? { shouldExportQueryKey: true }
+      : {}),
+    ...(queryOptions.shouldExportHttpClient
+      ? { shouldExportHttpClient: true }
+      : {}),
   };
 };
 
@@ -107,6 +118,15 @@ export const vueUnRefParams = (props: GetterProps): string => {
     })
     .join('\n');
 };
+
+export const wrapRouteParameters = (
+  route: string,
+  prepend: string,
+  append: string,
+): string => route.replaceAll(TEMPLATE_TAG_REGEX, `\${${prepend}$1${append}}`);
+
+export const makeRouteSafe = (route: string): string =>
+  wrapRouteParameters(route, 'encodeURIComponent(String(', '))');
 
 export const isVue = (client: OutputClient | OutputClientFunc) =>
   OutputClient.VUE_QUERY === client;

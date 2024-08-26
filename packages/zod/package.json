@@ -1,6 +1,6 @@
 {
   "name": "@orval/zod",
-  "version": "6.19.0",
+  "version": "7.0.1",
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -8,12 +8,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup ./src/index.ts --target node12 --minify --clean --dts --splitting",
-    "dev": "tsup ./src/index.ts --target node12 --clean --watch src",
-    "lint": "eslint src/**/*.ts"
+    "build": "tsup ./src/index.ts --target node12 --clean --dts --sourcemap",
+    "dev": "tsup ./src/index.ts --target node12 --clean --watch --sourcemap src",
+    "lint": "eslint src/**/*.ts",
+    "test": "vitest run test.ts --global"
   },
   "dependencies": {
-    "@orval/core": "6.19.0",
+    "@orval/core": "7.0.1",
     "lodash.uniq": "^4.5.0"
   },
   "devDependencies": {

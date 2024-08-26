@@ -1,6 +1,6 @@
 import omit from 'lodash.omit';
-import { SchemaObject } from 'openapi3-ts';
-import { resolveObject } from '../resolvers';
+import { SchemaObject } from 'openapi3-ts/oas30';
+import { resolveExampleRefs, resolveObject } from '../resolvers';
 import {
   ContextSpecs,
   GeneratorImport,
@@ -11,6 +11,7 @@ import {
 import { getNumberWord, pascal } from '../utils';
 import { getEnumImplementation } from './enum';
 import { getScalar } from './scalar';
+import uniq from 'lodash.uniq';
 
 type CombinedData = {
   imports: GeneratorImport[];
@@ -21,6 +22,11 @@ type CombinedData = {
   isEnum: boolean[];
   types: string[];
   hasReadonlyProps: boolean;
+  /**
+   * List of all properties in all subschemas
+   * - used to add missing properties in subschemas to avoid TS error described in @see https://github.com/orval-labs/orval/issues/935
+   */
+  allProperties: string[];
 };
 
 type Separator = 'allOf' | 'anyOf' | 'oneOf';
@@ -29,10 +35,12 @@ const combineValues = ({
   resolvedData,
   resolvedValue,
   separator,
+  context,
 }: {
   resolvedData: CombinedData;
   resolvedValue?: ScalarValue;
   separator: Separator;
+  context: ContextSpecs;
 }) => {
   const isAllEnums = resolvedData.isEnum.every((v) => v);
 
@@ -48,13 +56,39 @@ const combineValues = ({
     }`;
   }
 
+  let values = resolvedData.values;
+  const hasObjectSubschemas = resolvedData.allProperties.length;
+  if (hasObjectSubschemas && context.output.unionAddMissingProperties) {
+    values = []; // the list of values will be rebuilt to add missing properties (if exist) in subschemas
+    for (let i = 0; i < resolvedData.values.length; i += 1) {
+      const subSchema = resolvedData.originalSchema[i];
+      if (subSchema?.type !== 'object') {
+        values.push(resolvedData.values[i]);
+        continue;
+      }
+
+      const missingProperties = uniq(
+        resolvedData.allProperties.filter(
+          (p) => !Object.keys(subSchema.properties!).includes(p),
+        ),
+      );
+      values.push(
+        `${resolvedData.values[i]}${
+          missingProperties.length
+            ? ` & {${missingProperties.map((p) => `${p}?: never`).join('; ')}}`
+            : ''
+        }`,
+      );
+    }
+  }
+
   if (resolvedValue) {
-    return `(${resolvedData.values.join(` & ${resolvedValue.value}) | (`)} & ${
+    return `(${values.join(` & ${resolvedValue.value}) | (`)} & ${
       resolvedValue.value
     })`;
   }
 
-  return resolvedData.values.join(' | ');
+  return values.join(' | ');
 };
 
 export const combineSchemas = ({
@@ -95,6 +129,15 @@ export const combineSchemas = ({
       acc.originalSchema.push(resolvedValue.originalSchema);
       acc.hasReadonlyProps ||= resolvedValue.hasReadonlyProps;
 
+      if (
+        resolvedValue.type === 'object' &&
+        resolvedValue.originalSchema.properties
+      ) {
+        acc.allProperties.push(
+          ...Object.keys(resolvedValue.originalSchema.properties),
+        );
+      }
+
       return acc;
     },
     {
@@ -105,40 +148,61 @@ export const combineSchemas = ({
       isRef: [],
       types: [],
       originalSchema: [],
+      allProperties: [],
       hasReadonlyProps: false,
+      example: schema.example,
+      examples: resolveExampleRefs(schema.examples, context),
     } as CombinedData,
   );
 
   const isAllEnums = resolvedData.isEnum.every((v) => v);
 
-  let resolvedValue;
+  if (isAllEnums && name && items.length > 1) {
+    const newEnum = `// eslint-disable-next-line @typescript-eslint/no-redeclare\nexport const ${pascal(
+      name,
+    )} = ${getCombineEnumValue(resolvedData)}`;
+
+    return {
+      value: `typeof ${pascal(name)}[keyof typeof ${pascal(name)}] ${nullable}`,
+      imports: [
+        {
+          name: pascal(name),
+        },
+      ],
+      schemas: [
+        ...resolvedData.schemas,
+        {
+          imports: [
+            ...resolvedData.imports.map<GeneratorImport>((toImport) => ({
+              ...toImport,
+              values: true,
+            })),
+          ],
+          model: newEnum,
+          name: name,
+        },
+      ],
+      isEnum: false,
+      type: 'object' as SchemaType,
+      isRef: false,
+      hasReadonlyProps: resolvedData.hasReadonlyProps,
+      example: schema.example,
+      examples: resolveExampleRefs(schema.examples, context),
+    };
+  }
+
+  let resolvedValue: ScalarValue | undefined;
 
   if (schema.properties) {
     resolvedValue = getScalar({ item: omit(schema, separator), name, context });
   }
 
-  const value = combineValues({ resolvedData, separator, resolvedValue });
-
-  if (isAllEnums && name && items.length > 1) {
-    const newEnum = `\n\n// eslint-disable-next-line @typescript-eslint/no-redeclare\nexport const ${pascal(
-      name,
-    )} = ${getCombineEnumValue(resolvedData)}`;
-
-    return {
-      value:
-        `typeof ${pascal(name)}[keyof typeof ${pascal(name)}] ${nullable};` +
-        newEnum,
-      imports: resolvedData.imports.map<GeneratorImport>((toImport) => ({
-        ...toImport,
-        values: true,
-      })),
-      schemas: resolvedData.schemas,
-      isEnum: false,
-      type: 'object' as SchemaType,
-      isRef: false,
-      hasReadonlyProps: resolvedData.hasReadonlyProps,
-    };
-  }
+  const value = combineValues({
+    resolvedData,
+    separator,
+    resolvedValue,
+    context,
+  });
 
   return {
     value: value + nullable,
@@ -155,6 +219,8 @@ export const combineSchemas = ({
       resolvedData?.hasReadonlyProps ||
       resolvedValue?.hasReadonlyProps ||
       false,
+    example: schema.example,
+    examples: resolveExampleRefs(schema.examples, context),
   };
 };
 

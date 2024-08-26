@@ -13,6 +13,73 @@ export default defineConfig({
       target: '../specifications/petstore.yaml',
     },
   },
+  petstoreTagsSplit: {
+    output: {
+      target: '../generated/react-query/petstore-tags-split/endpoints.ts',
+      schemas: '../generated/react-query/petstore-tags-split/model',
+      mock: true,
+      mode: 'tags-split',
+      client: 'react-query',
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
+    },
+  },
+  petstoreSplit: {
+    output: {
+      target: '../generated/react-query/split/endpoints.ts',
+      schemas: '../generated/react-query/split/model',
+      mock: true,
+      mode: 'split',
+      client: 'react-query',
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
+    },
+  },
+  petstoreTags: {
+    output: {
+      target: '../generated/react-query/tags/endpoints.ts',
+      schemas: '../generated/react-query/tags/model',
+      mock: true,
+      mode: 'tags',
+      client: 'react-query',
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
+    },
+  },
+  httpClientFetch: {
+    output: {
+      target: '../generated/react-query/http-client-fetch/endpoints.ts',
+      schemas: '../generated/react-query/http-client-fetch/model',
+      mode: 'tags-split',
+      client: 'react-query',
+      httpClient: 'fetch',
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
+    },
+  },
+  httpClientFetchWithIncludeHttpStatusReturnType: {
+    output: {
+      target:
+        '../generated/react-query/http-client-fetch-with-include-http-status-return-type/endpoints.ts',
+      schemas:
+        '../generated/react-query/http-client-fetch-with-include-http-status-return-type/model',
+      mode: 'tags-split',
+      client: 'react-query',
+      httpClient: 'fetch',
+      override: {
+        fetch: {
+          includeHttpStatusReturnType: false,
+        },
+      },
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
+    },
+  },
   mutator: {
     output: {
       target: '../generated/react-query/mutator/endpoints.ts',
@@ -62,6 +129,26 @@ export default defineConfig({
       override: {
         transformer: '../transformers/add-version.js',
       },
+    },
+  },
+  httpClientFetchWithCustomFetch: {
+    output: {
+      target:
+        '../generated/react-query/http-client-fetch-with-custom-fetch/endpoints.ts',
+      schemas:
+        '../generated/react-query/http-client-fetch-with-custom-fetch/model',
+      client: 'react-query',
+      httpClient: 'fetch',
+      mock: true,
+      override: {
+        mutator: {
+          path: '../mutators/custom-fetch.ts',
+          name: 'customFetch',
+        },
+      },
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
     },
   },
   mutatorMultiArguments: {
@@ -150,8 +237,8 @@ export default defineConfig({
   },
   formData: {
     output: {
-      target: '../generated/react-query/formData/endpoints.ts',
-      schemas: '../generated/react-query/formData/model',
+      target: '../generated/react-query/form-data/endpoints.ts',
+      schemas: '../generated/react-query/form-data/model',
       client: 'react-query',
       mock: true,
       override: {
@@ -184,8 +271,8 @@ export default defineConfig({
   },
   formDataMutator: {
     output: {
-      target: '../generated/react-query/form-data/endpoints.ts',
-      schemas: '../generated/react-query/form-data/model',
+      target: '../generated/react-query/form-data-with-mutator/endpoints.ts',
+      schemas: '../generated/react-query/form-data-with-mutator/model',
       client: 'react-query',
       mock: true,
       override: {
@@ -274,6 +361,20 @@ export default defineConfig({
           arrayMin: 5,
           arrayMax: 15,
         },
+      },
+    },
+    input: {
+      target: '../specifications/petstore.yaml',
+    },
+  },
+  mockWithoutDelay: {
+    output: {
+      target: '../generated/react-query/mockWithoutDelay/endpoints.ts',
+      schemas: '../generated/react-query/mockWithoutDelay/model',
+      client: 'react-query',
+      mock: {
+        type: 'msw',
+        delay: false,
       },
     },
     input: {

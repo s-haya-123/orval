@@ -1,4 +1,4 @@
-import { ResponsesObject } from 'openapi3-ts';
+import { ResponsesObject } from 'openapi3-ts/oas30';
 import {
   ContextSpecs,
   GetterResponse,
@@ -37,6 +37,7 @@ export const getResponse = ({
     operationName,
     context,
     'void',
+    (type) => type.key.startsWith('2') + type.value,
   );
 
   const filteredTypes = contentType
